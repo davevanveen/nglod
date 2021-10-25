@@ -56,6 +56,9 @@ if __name__ == '__main__':
 
     # Parse
     parser = parse_options(return_parser=True)
+
+    #parser.add_argument('--gpu', type=int, default=0, help='gpu id')
+
     app_group = parser.add_argument_group('app')
     app_group.add_argument('--img-dir', type=str, default='_results/render_app/imgs',
                            help='Directory to output the rendered images')
@@ -81,6 +84,8 @@ if __name__ == '__main__':
                            help='Depth of 2D slice.')
     args = parser.parse_args()
 
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
+    
     # Pick device
     use_cuda = torch.cuda.is_available()
     device = torch.device('cuda' if use_cuda else 'cpu')
@@ -138,7 +143,8 @@ if __name__ == '__main__':
             rad = np.radians(angle)
             model_matrix = torch.FloatTensor(R.from_rotvec(rad * np.array([0, 1, 0])).as_matrix())
 
-            out = renderer.shade_images(f=args.camera_origin,
+            out = renderer.shade_images(net=net,
+                                        f=args.camera_origin,
                                         t=args.camera_lookat,
                                         fov=args.camera_fov,
                                         aa=not args.disable_aa,
@@ -159,7 +165,8 @@ if __name__ == '__main__':
         views = sample_fib_sphere(args.nb_poses)
         cam_origins = args.cam_radius * views
         for p, cam_origin in enumerate(cam_origins):
-            out = renderer.shade_images(f=cam_origin,
+            out = renderer.shade_images(net=net,
+                                        f=cam_origin,
                                         t=args.camera_lookat,
                                         fov=args.camera_fov,
                                         aa=not args.disable_aa,

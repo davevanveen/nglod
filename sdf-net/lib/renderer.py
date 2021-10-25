@@ -49,6 +49,7 @@ class Renderer():
         render_batch : int  = None, # -1 for no batching
         shading_mode : str  = None, # one of ['matcap', 'rb']
         matcap_path  : str  = None, # set if shadming mode = matcap
+        #matcap_path  : str  = '/home/vanveen/nglod/data/matcap/green.png', # set if shadming mode = matcap
         shadow       : bool = None, 
         ao           : bool = None, 
         perf         : bool = None,

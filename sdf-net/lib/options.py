@@ -30,7 +30,9 @@ import pprint
 def parse_options(return_parser=False):
     # New CLI parser
     parser = argparse.ArgumentParser(description='Train deep implicit 3D geometry representations.')
-    
+
+    parser.add_argument('--gpu', type=int, default=0, help='gpu id')
+
     # Global arguments
     global_group = parser.add_argument_group('global')
     global_group.add_argument('--exp-name', type=str,
@@ -196,7 +198,7 @@ def parse_options(return_parser=False):
     renderer_group.add_argument('--render-batch', type=int, default=0, 
                                 help='Batch size for batched rendering.')
     renderer_group.add_argument('--matcap-path', type=str, 
-                                default='data/matcap/green.png', 
+                                default='/home/vanveen/nglod/data/matcap/green.png', 
                                 help='Path to the matcap texture to render with.')
     renderer_group.add_argument('--camera-origin', type=float, nargs=3, default=[-2.8, 2.8, -2.8], 
                                 help='Camera origin.')
