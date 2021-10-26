@@ -104,7 +104,7 @@ if __name__ == '__main__':
         net.lod = args.lod
 
     N = 512
-    x = torch.linspace(-0.5, 0.5, N)
+    x = torch.linspace(-1, 1, N)
     x, y, z = torch.meshgrid(x, x, x)
     all_coords = torch.stack((x.flatten(), y.flatten(), z.flatten()), dim=-1).cuda()
 
@@ -115,5 +115,8 @@ if __name__ == '__main__':
         sdf_values[i*bsize:(i+1)*bsize] = net(coords).cpu().detach().numpy()
 
     sdf_values = sdf_values.reshape(N, N, N)
-    with mrcfile.new_mmap(f'results/{args.out_file}', overwrite=True, shape=(N, N, N), mrc_mode=2) as mrc:
-        mrc.data[:] = -sdf_values
+    vertices, triangles = mcubes.marching_cubes(sdf_values, 0)
+    mcubes.export_mesh(vertices, triangles, f"results/{args.out_file}.dae", "shape")
+
+    # with mrcfile.new_mmap(f'results/{args.out_file}.mrc', overwrite=True, shape=(N, N, N), mrc_mode=2) as mrc:
+    #     mrc.data[:] = -sdf_values
