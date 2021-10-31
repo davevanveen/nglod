@@ -103,6 +103,8 @@ def parse_options(return_parser=False):
                             help='Use analytic dataset')
     data_group.add_argument('--mesh-dataset', type=str, default='MeshDataset',
                             help='Mesh dataset class')
+    data_group.add_argument('--sphere-dataset', type=str, default=None,
+                            help='load sphere sdf')
     data_group.add_argument('--raw-obj-path', type=str, default=None,
                             help='Raw mesh root directory to be preprocessed')
     data_group.add_argument('--mesh-batch', action='store_true',

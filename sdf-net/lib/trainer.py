@@ -43,6 +43,7 @@ from torch.utils.data import Dataset, DataLoader
 from tqdm.auto import tqdm
 
 from lib.datasets import *
+from lib.datasets.SphereDataset import SphereDataset
 from lib.diffutils import positional_encoding, gradient
 from lib.models import *
 from lib.renderer import Renderer
@@ -150,7 +151,12 @@ class Trainer(object):
         The code uses the mesh dataset by default, unless --analytic is specified in CLI.
         """
 
-        self.train_dataset = globals()[self.args.mesh_dataset](self.args)
+        if self.sphere_dataset:
+            raise NotImplementedError
+            self.train_dataset = SphereDataset(num_pts=1331) # 11^3 bins
+            self.args.batch_size = 1
+        else:
+            self.train_dataset = globals()[self.args.mesh_dataset](self.args)
 
         log.info("Dataset Size: {}".format(len(self.train_dataset)))
         
