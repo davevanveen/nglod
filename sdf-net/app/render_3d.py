@@ -41,6 +41,51 @@ from lib.models import *
 from lib.options import parse_options
 import mrcfile
 import mcubes
+import trimesh
+
+
+def nglod_normalize(V):
+    # Normalize mesh
+    V_max = np.max(V, axis=0)
+    V_min = np.min(V, axis=0)
+    V_center = (V_max + V_min) / 2.
+    V = V - V_center
+
+    # Find the max distance to origin
+    max_dist = np.sqrt(np.max(np.sum(V**2, axis=-1)))
+    V_scale = 1. / max_dist
+    V *= V_scale
+    # return V_scale, V_center
+    return V, V_scale, -V_center*V_scale
+
+
+# def normalize(coords):
+#     cmean = np.mean(coords, axis=0, keepdims=True)
+#     coords -= cmean
+#     coord_max = np.amax(coords)
+#     coord_min = np.amin(coords)
+#     coords = (coords - coord_min) / (coord_max - coord_min)
+#     coords -= 0.5
+#     coords *= 2.
+# 
+#     scale = 2 / (coord_max - coord_min)
+#     offset = -2 * (cmean + coord_min) / (coord_max - coord_min) - 1
+#     return coords, scale, offset
+
+
+def normalize(coords, scaling=0.9):
+    coords = np.array(coords).copy()
+    cmean = np.mean(coords, axis=0, keepdims=True)
+    coords -= cmean
+    coord_max = np.amax(coords)
+    coord_min = np.amin(coords)
+    coords = (coords - coord_min) / (coord_max - coord_min)
+    coords -= 0.5
+    coords *= scaling
+
+    scale = scaling / (coord_max - coord_min)
+    offset = -scaling * (cmean + coord_min) / (coord_max - coord_min) - 0.5*scaling
+    return coords, scale, offset
 
 
 if __name__ == '__main__':
@@ -75,6 +120,12 @@ if __name__ == '__main__':
                            help='Rotation in degrees.')
     app_group.add_argument('--depth', type=float, default=0.0,
                            help='Depth of 2D slice.')
+    app_group.add_argument('--shape', type=str,
+                           help='shape name')
+    app_group.add_argument('--mrc', action='store_true',
+                           help='save fft mrc instead of mesh')
+
+
     args = parser.parse_args()
 
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu)
@@ -103,8 +154,18 @@ if __name__ == '__main__':
     if args.lod is not None:
         net.lod = args.lod
 
-    N = 512
-    x = torch.linspace(-1, 1, N)
+    if args.mrc:
+        if 'lucy' in args.shape or 'thai' in args.shape:
+            N = 512
+        else:
+            N = 384
+        x = torch.arange(-N//2, N//2) / N
+        x = x.float()
+
+    else:
+        N = 512
+        x = torch.linspace(-1, 1, N)
+
     x, y, z = torch.meshgrid(x, x, x)
     all_coords = torch.stack((x.flatten(), y.flatten(), z.flatten()), dim=-1).cuda()
 
@@ -115,8 +176,66 @@ if __name__ == '__main__':
         sdf_values[i*bsize:(i+1)*bsize] = net(coords).cpu().detach().numpy()
 
     sdf_values = sdf_values.reshape(N, N, N)
-    vertices, triangles = mcubes.marching_cubes(sdf_values, 0)
-    mcubes.export_mesh(vertices, triangles, f"results/{args.out_file}.dae", "shape")
 
-    # with mrcfile.new_mmap(f'results/{args.out_file}.mrc', overwrite=True, shape=(N, N, N), mrc_mode=2) as mrc:
-    #     mrc.data[:] = -sdf_values
+    if args.mrc:
+        sdf_ft = np.abs(np.fft.fftshift(np.fft.fftn(sdf_values)))
+        sdf_ft = sdf_ft / np.max(sdf_ft)*1000
+        sdf_ft = np.clip(sdf_ft, 0, 1)**(1/3)
+        with mrcfile.new_mmap(f'./results/spectra/{args.out_file}.mrc', overwrite=True, shape=(N, N, N), mrc_mode=2) as mrc:
+            mrc.data[:] = sdf_ft
+        exit()
+
+    vertices, triangles = mcubes.marching_cubes(-sdf_values, 0)
+    mesh = trimesh.Trimesh(vertices=vertices, faces=triangles)
+    # mesh.vertices -= mesh.bounding_box.centroid
+    # mesh.vertices /= np.max(mesh.bounding_box.extents / 2)
+    # mesh.vertices, _, _ = normalize(mesh.vertices)
+    mesh.vertices = 2 * (mesh.vertices / N - 0.5) + 1/N
+
+    # load NGLOD and undo scaling
+    # first undo scaling that was applied to the mesh during NGLOD training
+    if 'sphere' in args.shape:
+        mesh.vertices = mesh.vertices * 0.25 / np.mean(np.linalg.norm(mesh.vertices, axis=-1))
+        mesh.export(f"results/{args.out_file}.obj")
+        exit()
+
+    # align with bacon GT mesh
+    def bb_normalize(mesh):
+        scale = 1/np.max(mesh.bounding_box.extents / 2)
+        offset = -mesh.bounding_box.centroid * scale
+        v = mesh.vertices.copy() * scale + offset
+        return v, scale, offset
+
+    if 'lucy' in args.shape:
+        gt_mesh = trimesh.load(f'/home/lindell/workspace/mfintegration/results/outputs/shapes/gt_nglod_{args.shape}.obj')
+        # undo nglod scaling and rotate
+        _, scale, offset = nglod_normalize(gt_mesh.vertices.copy())
+        mesh.vertices = (mesh.vertices - offset) / scale
+        
+        mesh.vertices = mesh.vertices @ trimesh.transformations.rotation_matrix(-np.pi/2, [1, 0, 0])[:3, :3]
+        gt_mesh.vertices = gt_mesh.vertices @ trimesh.transformations.rotation_matrix(-np.pi/2, [1, 0, 0])[:3, :3]
+
+        gt_mesh.vertices, scale, offset = bb_normalize(gt_mesh)
+        mesh.vertices = mesh.vertices * scale + offset
+
+        gt_mesh = trimesh.load(f'/home/lindell/workspace/mfintegration/results/outputs/shapes/gt_{args.shape}.obj')
+        gt_mesh.vertices, scale, offset = bb_normalize(gt_mesh)
+        mesh.vertices = (mesh.vertices - offset) / scale
+
+    elif 'dragon' in args.shape:
+        gt_mesh = trimesh.load(f'/home/lindell/workspace/mfintegration/results/outputs/shapes/gt_nglod_{args.shape}.obj')
+        # undo nglod scaling
+        _, scale, offset = nglod_normalize(gt_mesh.vertices.copy())
+        mesh.vertices = (mesh.vertices - offset) / scale
+
+    else:
+        gt_mesh = trimesh.load(f'/home/lindell/workspace/mfintegration/results/outputs/shapes/gt_{args.shape}.obj')
+
+        _, scale, offset = nglod_normalize(gt_mesh.vertices)
+        mesh.vertices = (mesh.vertices - offset) / scale
+
+    # then apply the scaling that we used for the bacon/siren models
+    gt_mesh = trimesh.load(f'/home/lindell/workspace/mfintegration/results/outputs/shapes/gt_{args.shape}.xyz')
+    gt_mesh.vertices, scale, offset = normalize(gt_mesh.vertices)
+    mesh.vertices = mesh.vertices * scale + offset
+    mesh.export(f"results/{args.out_file}.obj")

@@ -2,8 +2,8 @@ shape=bunny
 
 python3.8 app/main.py \
     --net OctreeSDF \
-    --num-lods 4 \
-    --dataset-path /home/vanveen/nglod/data/$shape.obj \
+    --num-lods 1 \
+    --dataset-path ./gt/$shape.obj \
     --epoch 250 \
-    --gpu 7 \
-    --exp-name $shape
+    --gpu 0 \
+    --exp-name test #$shape

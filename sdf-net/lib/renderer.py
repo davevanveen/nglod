@@ -33,7 +33,7 @@ from lib.utils import PerfTimer, setparam
 from lib.diffutils import gradient
 from lib.geoutils import normalize, look_at, compute_normal, matcap_sampler, spherical_envmap
 from lib.geoutils import normalized_slice
-from lib.PsDebugger import PsDebugger
+# from lib.PsDebugger import PsDebugger
 
 from lib.tracer import *
 
